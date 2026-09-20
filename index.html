@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Werewolf Online</title>
+  <link rel="stylesheet" href="src/style.css" />
+  <script defer src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script defer src="src/firebase.js"></script>
+  <script defer src="src/index.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>🐺 Werewolf Online</h1>
+      <p class="subtitle">เล่นกับเพื่อน ฟรี ไม่มีเสียง</p>
+    </header>
+
+    <main>
+      <section class="name-section">
+        <label for="player-name">ชื่อของคุณ</label>
+        <input type="text" id="player-name" placeholder="ใส่ชื่อเล่น" maxlength="16" />
+      </section>
+
+      <section class="room-section">
+        <button id="btn-create" class="btn btn-primary">สร้างห้องใหม่</button>
+
+        <div class="divider">
+          <span>หรือ</span>
+        </div>
+
+        <div class="join-room">
+          <label for="room-code">เข้าร่วมห้อง</label>
+          <div class="code-input-row">
+            <input type="text" id="room-code" placeholder="รหัส 4 หลัก" maxlength="4" inputmode="numeric" pattern="[0-9]*" />
+            <button id="btn-join" class="btn btn-secondary">เข้าร่วม</button>
+          </div>
+        </div>
+      </section>
+
+      <p id="error-message" class="error hidden"></p>
+    </main>
+
+    <footer>
+      <a href="help.html">กติกา</a>
+      <a href="profile.html">โปรไฟล์</a>
+    </footer>
+  </div>
+</body>
+</html>

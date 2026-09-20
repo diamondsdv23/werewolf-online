@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Werewolf Online — ผู้เล่น</title>
+  <link rel="stylesheet" href="src/style.css" />
+  <script defer src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script defer src="src/firebase.js"></script>
+  <script defer src="src/roles.js"></script>
+  <script defer src="src/game.js"></script>
+  <script defer src="src/player.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="room-code" id="room-code">----</div>
+    </header>
+
+    <main class="card-main">
+      <section id="role-card" class="role-card hidden">
+        <div class="role-card-top">
+          <img id="role-icon" class="role-card-icon" src="" alt="" />
+          <span id="role-team" class="tag"></span>
+        </div>
+        <h2 id="role-name" class="role-card-name">---</h2>
+        <p id="role-desc" class="role-card-desc"></p>
+        <p class="hint">จำบทบาทตัวเองไว้ อย่าให้ใครรู้</p>
+      </section>
+
+      <section id="waiting-view">
+        <p class="waiting-msg">กำลังรอคนทรงแจกบทบาท...</p>
+      </section>
+
+      <p id="error-message" class="error hidden"></p>
+    </main>
+  </div>
+</body>
+</html>

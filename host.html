@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Werewolf Online — คนทรง</title>
+  <link rel="stylesheet" href="src/style.css" />
+  <script defer src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script defer src="src/firebase.js"></script>
+  <script defer src="src/roles.js"></script>
+  <script defer src="src/game.js"></script>
+  <script defer src="src/host-control.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <a href="javascript:history.back()" class="back-link">‹ กลับ</a>
+      <div class="room-code" id="room-code">----</div>
+    </header>
+
+    <main>
+      <h2 class="page-title">หน้าคนทรง</h2>
+
+      <section id="setup-view">
+        <h3 class="section-title">ผู้เล่นในห้อง <span id="player-count">0</span>/16</h3>
+        <ul id="player-list" class="player-list"></ul>
+
+        <h3 class="section-title">ตั้งค่าบทบาท</h3>
+        <p class="hint">หมาป่าแนะนำ: <span id="wolf-recommend"></span> ตัว · บทบาทที่เหลือเติมด้วยชาวบ้านอัตโนมัติ</p>
+        <div id="setting-list" class="setting-list"></div>
+
+        <div id="config-summary" class="config-summary"></div>
+        <div id="validation-box" class="validation-box"></div>
+
+        <button id="btn-start" class="btn btn-primary">เริ่มเกม · แจก Role</button>
+        <p id="error-message" class="error hidden"></p>
+      </section>
+
+      <section id="game-view" class="hidden">
+        <h3 class="section-title">เกมเริ่มแล้ว — บทบาทของผู้เล่น</h3>
+        <ul id="role-list" class="role-list"></ul>
+        <p class="hint">Phase 3 จะเพิ่มระบบควบคุมกลางคืน (เรียก Role, Cursed, Hunter)</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

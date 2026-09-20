@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Werewolf Online — Lobby</title>
+  <link rel="stylesheet" href="src/style.css" />
+  <script defer src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script defer src="src/firebase.js"></script>
+  <script defer src="src/roles.js"></script>
+  <script defer src="src/game.js"></script>
+  <script defer src="src/lobby.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <a href="index.html" class="back-link">‹ หน้าแรก</a>
+      <div class="room-code" id="room-code">----</div>
+    </header>
+
+    <main>
+      <h2 class="page-title">ห้องรอผู้เล่น</h2>
+      <p class="subtitle">รหัสห้อง 4 หลัก ส่งต่อให้เพื่อนได้เลย</p>
+
+      <section class="lobby-stats">
+        <span id="player-count">0</span> / 16 ผู้เล่น
+      </section>
+
+      <ul id="player-list" class="player-list"></ul>
+
+      <section class="lobby-control">
+        <p id="waiting-msg" class="waiting-msg">รอคนทรง... กดเริ่มเมื่อทุกคนพร้อม</p>
+        <a id="btn-host" href="#" class="btn btn-primary hidden">ไปหน้าคนทรง (ตั้งค่าเกม)</a>
+        <p id="error-message" class="error hidden"></p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
