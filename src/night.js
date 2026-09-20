@@ -1,4 +1,4 @@
-const NIGHT_STATE = {
+﻿const NIGHT_STATE = {
   idle: 'idle',
   calling: 'calling', // host กำลังเรียก role นี้อยู่
   waiting: 'waiting', // host รอให้ role ครบ action
@@ -27,7 +27,9 @@ function metaNightRef(code) {
 }
 
 function wolfActionsRef(code) {
-  return db.ref('rooms/' + code + '/night/wolf')
+  // wolf picks เก็บที่ rooms/$code/wolf (ตรง security rules ที่ publish อยู่แล้ว:
+  // .read/.write = werewolf + host) → ไม่ต้องแก้ rules/ไม่ต้อง publish ใหม่
+  return db.ref('rooms/' + code + '/wolf')
 }
 
 // ===================== HOST =====================
@@ -50,12 +52,13 @@ async function hostStartNight(code) {
   updates['meta/nightResult'] = null
   updates['meta/hunterReveal'] = null
 
-  // เคลียร์ night node + เตรียม wolf picks
-  updates['night'] = { wolf: {} }
+  // wolf picks เก็บที่ top-level wolf node (host + werewolf เขียนได้ตาม rules)
+  updates['wolf'] = {}
+  updates['meta/hostCall'] = ''
+  updates['meta/wolfConfirmed'] = null
+  updates['meta/nightResult'] = null
+  updates['meta/hunterReveal'] = null
 
-  // คำนวณทีมหมาป่าจริง (werewolf/wolf_cub/sorceress) + Cursed ที่กลายเป็นหมาป่าแล้ว
-  const wolfTeammates = []
-  for (const [uid, p] of playerList) {
     const role = getRole(p.role)
     if (!role) continue
     if (p.role === 'werewolf' || p.role === 'wolf_cub' || p.role === 'sorceress') {
@@ -122,7 +125,7 @@ async function hostFinishNight(code) {
   const meta = data.meta || {}
   const players = data.players || {}
   const night = data.night || {}
-  const wolfPicks = (night.wolf || {})
+  const wolfPicks = (data.wolf || {}) // wolf picks เก็บที่ top-level wolf node (อ่านจาก data.wolf ไม่ใช่ night.wolf)
   const confirmed = meta.wolfConfirmed
   const nightIndex = meta.nightIndex || 0
 
@@ -216,8 +219,8 @@ async function hostFinishNight(code) {
   }
   updates['meta/hostCall'] = ''
 
-  // เคลียร์ night หลังจบ
-  updates['night'] = null
+  // เคลียร์ wolf picks หลังจบ
+  updates['wolf'] = {}
 
   await r.update(updates)
   return updates['meta/nightResult']
