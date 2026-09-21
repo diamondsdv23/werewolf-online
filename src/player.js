@@ -329,6 +329,15 @@ function useNightActionUI(data, meta) {
     return
   }
 
+  // mason: เห็นคู่เมสัน (รู้กันว่าเป็นฝ่ายดี) — ไม่ต้องตอบ action
+  if (role.id === 'mason') {
+    const mates = Object.entries(data.players || {})
+      .filter(([uid, p]) => p && p.role === 'mason' && uid !== getUserId())
+      .map(([uid, p]) => playerName(p, uid))
+    nightActionStatusEl.textContent = '🧱 host เรียก Mason — เหล่าเมสัน: ' + (mates.length ? mates.join(', ') : '—') + ' (รู้กันว่าเป็นฝ่ายดี — ปิดตาได้)'
+    return
+  }
+
   // เขียน action แล้วในคืนนี้ → กันฟอร์มเด้งกลับ + แสดงผลตรวจถ้ามี
   if (doneOwnTask) {
     if (role.id === 'seer' || role.id === 'aura_seer' || role.id === 'sorceress') {

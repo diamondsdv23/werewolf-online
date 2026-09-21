@@ -90,6 +90,12 @@ btnJoin.addEventListener('click', async () => {
       return
     }
 
+    const alreadyIn = roomData.players && roomData.players[getUserId()]
+    if (roomData.meta.locked === true && !alreadyIn) {
+      showError('ห้องถูกล็อกแล้ว (คนทรงล็อกห้องไว้)')
+      return
+    }
+
     const playerCount = roomData.players ? Object.keys(roomData.players).length : 0
     if (playerCount >= 16) {
       showError('ห้องเต็มแล้ว')

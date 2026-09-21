@@ -13,6 +13,7 @@
   <script defer src="src/game.js"></script>
   <script defer src="src/night.js"></script>
   <script defer src="src/cursed.js"></script>
+  <script defer src="src/win-check.js"></script>
   <script defer src="src/host-control.js"></script>
 </head>
 <body>
@@ -41,6 +42,10 @@
       </section>
 
       <section id="game-view" class="hidden">
+        <div id="win-banner" class="hidden" style="padding:16px;border:2px solid var(--danger);border-radius:12px;margin-top:12px;">
+          <div class="setting-name" id="win-banner-title">🏆 ชนะ</div>
+          <p class="hint" id="win-banner-reason" style="margin-top:4px;"></p>
+        </div>
         <h3 class="section-title">เกมเริ่มแล้ว — บทบาทของผู้เล่น</h3>
         <ul id="role-list" class="role-list"></ul>
         <div id="night-view" class="hidden" style="margin-top:18px;padding:16px;border:1px solid var(--line);border-radius:12px;">

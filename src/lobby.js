@@ -5,6 +5,8 @@ const playerCountEl = document.getElementById('player-count')
 const waitingMsgEl = document.getElementById('waiting-msg')
 const btnHost = document.getElementById('btn-host')
 const errorEl = document.getElementById('error-message')
+const hostControlsEl = document.getElementById('host-controls')
+const lockToggleEl = document.getElementById('lock-toggle')
 
 function showError(msg) {
   errorEl.textContent = msg
@@ -24,6 +26,7 @@ btnHost.href = 'host.html?code=' + code
 function renderPlayers(players, hostUid) {
   const entries = Object.entries(players || {})
   playerCountEl.textContent = entries.length
+  const isHost = hostUid === getUserId()
 
   if (entries.length === 0) {
     playerListEl.innerHTML = '<li class="player-row empty">ยังไม่มีผู้เล่น</li>'
@@ -38,7 +41,7 @@ function renderPlayers(players, hostUid) {
     const nameSpan = document.createElement('span')
     nameSpan.className = 'player-name'
     const nm = String(p.name || '').trim()
-    nameSpan.textContent = nm || 'ผู้เล่นที่ยังไม่ตั้งชื่อ'
+    nameSpan.textContent = nm || 'ผู้เล่น-' + String(uid).slice(-4)
 
     const tags = document.createElement('span')
     tags.className = 'player-tags'
@@ -47,6 +50,19 @@ function renderPlayers(players, hostUid) {
     }
     if (uid === getUserId()) {
       tags.innerHTML += '<span class="tag tag-me">คุณ</span>'
+    }
+
+    if (isHost && uid !== hostUid) {
+      const kickBtn = document.createElement('button')
+      kickBtn.className = 'btn btn-danger'
+      kickBtn.textContent = 'ลบ'
+      kickBtn.style.cssText = 'margin-left:auto;padding:4px 10px;font-size:12px;'
+      kickBtn.addEventListener('click', () => {
+        if (window.confirm('ลบ ' + (nameSpan.textContent || 'ผู้เล่นนี้') + ' ออกจากห้อง?')) {
+          playersRef(code).child(uid).remove().catch((err) => showError('ลบไม่สำเร็จ: ' + err.message))
+        }
+      })
+      li.appendChild(kickBtn)
     }
 
     li.appendChild(nameSpan)
@@ -79,11 +95,20 @@ function handleRoomData(snap) {
   if (isHost) {
     btnHost.classList.remove('hidden')
     waitingMsgEl.classList.add('hidden')
+    if (hostControlsEl) hostControlsEl.classList.remove('hidden')
+    if (lockToggleEl && lockToggleEl.checked !== !!meta.locked) lockToggleEl.checked = !!meta.locked
   } else {
     btnHost.classList.add('hidden')
     waitingMsgEl.textContent = 'รอคนทรงเริ่มเกม...'
     waitingMsgEl.classList.remove('hidden')
+    if (hostControlsEl) hostControlsEl.classList.add('hidden')
   }
+}
+
+if (lockToggleEl) {
+  lockToggleEl.addEventListener('change', () => {
+    metaRef(code).update({ locked: !!lockToggleEl.checked }).catch((err) => showError('ตั้งล็อกไม่สำเร็จ: ' + err.message))
+  })
 }
 
 initAuth().then(() => {

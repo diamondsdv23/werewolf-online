@@ -156,6 +156,10 @@ async function ensureJoined(code, name, maxPlayers = 16) {
     throw new Error('เกมเริ่มแล้ว ไม่สามารถเข้าร่วมได้')
   }
 
+  if (data.meta && data.meta.locked === true) {
+    throw new Error('ห้องถูกล็อกแล้ว (คนทรงล็อกห้องไว้)')
+  }
+
   const count = data.players ? Object.keys(data.players).length : 0
   if (count >= maxPlayers) {
     throw new Error('ห้องเต็มแล้ว')

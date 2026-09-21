@@ -16,6 +16,9 @@ const NIGHT_ORDER_DEFAULT = [
   'bodyguard',
   'witch',
   'cursed',
+  'mason', // เห็นกัน ไม่ต้องตอบ action
+  'insomniac', // ไม่มี action (ชนะกับฝ่ายชาวบ้าน)
+  'diseased', // flag เฉยๆ (wolf ป่วยคืนถัดไปถ้าตายจากกัด)
 ]
 
 function nightRef(code) {
@@ -112,10 +115,23 @@ async function hostCallNextRole(code) {
 
 async function hostConfirmWolf(code, targetUid) {
   const r = roomRef(code)
-  await r.update({
+  const updates = {
     'meta/wolfConfirmed': targetUid,
     'meta/hostCall': '', // จบขั้น wolf
-  })
+  }
+  // confirm เป้าแล้ว → เช็คเงื่อนไขชนะทันที (จาก state ปัจจุบันก่อนจบคืน)
+  try {
+    const snap = await r.once('value')
+    const data = snap.val() || {}
+    const win = checkWinCondition(data.players || {}, data.meta || {})
+    if (win) {
+      updates['meta/win'] = win
+      updates['meta/phase'] = 'end'
+    }
+  } catch (e) {
+    // ไม่บล็อก flow หลัก (เช็คชนะรอบสุดท้ายที่ hostFinishNight)
+  }
+  await r.update(updates)
 }
 
 async function hostFinishNight(code) {
@@ -151,8 +167,7 @@ async function hostFinishNight(code) {
     wolfVictim = confirmed
   }
 
-  // wolf_cub death → next night kill 2 (flag)
-  const wolfCubKilled = playerIsWolfCubKilled(wolfVictim, players)
+  // wolf_cub death → next night kill 2 (flag) — คำนวณจาก deadUids หลัง apply (FIX 6a)
 
   // ===== 2. protections (doctor/bodyguard/witch save) =====
   let protectedUid = null
@@ -185,9 +200,11 @@ async function hostFinishNight(code) {
   }
 
   // ===== 4. apply =====
-  if (wolfVictim && protectedUid === wolfVictim) {
+  // Diseased ถูก wolf kill คืนก่อน → meta/wolvesSick=true → คืนนี้หมาป่าป่วย ฆ่าไม่ได้
+  const wolvesSick = meta.wolvesSick === true
+  if (wolfVictim && !wolvesSick && protectedUid === wolfVictim) {
     saved[wolfVictim] = 'protect'
-  } else if (wolfVictim) {
+  } else if (wolfVictim && !wolvesSick) {
     dead[wolfVictim] = 'wolf'
   }
 
@@ -220,9 +237,9 @@ async function hostFinishNight(code) {
   const updates = {}
   const wasCursedVictim = wolfVictim && players[wolfVictim] && players[wolfVictim].role === 'cursed'
   if (wasCursedVictim && !dead[wolfVictim]) {
-    // ถูกกัดแล้วรอด (มีคนช่วย) → ยังไม่เป็นหมาป่า (ต้องตายจากกัดเท่านั้นถึงเป็น)
+    // ถูกกัดแต่รอด (มีคนช่วย) → ยังไม่เป็นหมาป่า (ต้องตายจากกัด/ถูก kill จริงเท่านั้นถึงเป็น)
   } else if (wasCursedVictim && dead[wolfVictim]) {
-    // ถูกกัดตาย → Cursed กลายเป็นหมาป่าและตาย → จบ (Cursed ตายแต่เกมจบแบบหมาป่า)
+    // ถูกกัดตาย → Cursed กลายเป็นหมาป่าและตาย → เกมนับเป็นฝ่ายหมาป่า
     updates['players/' + wolfVictim + '/cursedStatus'] = 'wolf'
   }
 
@@ -235,12 +252,35 @@ async function hostFinishNight(code) {
       updates['meta/hunterReveal'] = uid // hunter ตายกลางคืน → เปิดเช้า
     }
     if (role && role.id === 'wolf_cub') {
-      updates['meta/wolfCubKilled'] = true // คืนถัดไป wolf ฆ่า 2 คน
+      // wolf_cub ตายด้วยวิธีไหนก็ตาม → คืนถัดไปหมาป่าฆ่า 2 (FIX 6a: ไม่มี overwrite จากบรรทัดอื่นแล้ว)
+      updates['meta/wolfCubKilled'] = true
     }
   }
-  updates['meta/wolfCubKilled'] = wolfCubKilled
 
-  updates['meta/phase'] = 'day'
+  // Diseased ถูก wolf kill จริง → คืนถัดไปหมาป่าป่วย ฆ่าใครไม่ได้ (meta/wolvesSick)
+  const diedByWolfKill = !!wolfVictim && dead[wolfVictim] === 'wolf'
+  if (diedByWolfKill && players[wolfVictim] && players[wolfVictim].role === 'diseased') {
+    updates['meta/wolvesSick'] = true
+  }
+  if (wolvesSick) updates['meta/wolvesSick'] = false // หมาป่าป่วย 1 คืนแล้ว → หาย
+
+  // ===== 7. win check (หลัง apply ครบ: wolf/save/poison/lovers/cursed/hunter/wolfcub/diseased) =====
+  const metaProj = { ...meta }
+  if (lovers) metaProj.lovers = lovers
+  const projPlayers = {}
+  for (const [uid, p] of Object.entries(players)) {
+    projPlayers[uid] = { ...p }
+    if (deadUids.indexOf(uid) >= 0) projPlayers[uid].alive = false
+    if (updates['players/' + uid + '/cursedStatus']) projPlayers[uid].cursedStatus = updates['players/' + uid + '/cursedStatus']
+  }
+  const win = checkWinCondition(projPlayers, metaProj)
+
+  if (win) {
+    updates['meta/win'] = win
+    updates['meta/phase'] = 'end'
+  } else {
+    updates['meta/phase'] = 'day'
+  }
   updates['meta/dayIndex'] = nightIndex
   updates['meta/nightResult'] = {
     dead: deadUids,
@@ -256,11 +296,6 @@ async function hostFinishNight(code) {
 
   await r.update(updates)
   return updates['meta/nightResult']
-}
-
-function playerIsWolfCubKilled(victim, players) {
-  if (!victim || !players[victim]) return false
-  return players[victim].role === 'wolf_cub'
 }
 
 // ===================== PLAYER =====================

@@ -32,7 +32,10 @@ function isWolfSide(p) {
   return false
 }
 
-// Host-side: ประเมินว่า Cursed ถูกกัดคืนนี้ไหม + เขียนสถานะ (เรียกเมื่อ hostCall==='cursed')
+// Host-side: ประเมินว่า Cursed ถูกกัด "จริง" (host ยืนยัน kill) ในคืนนี้ไหม
+// kill จริง = meta.wolfConfirmed (คนทรงยืนยันที่ wolf step ก่อนเรียก Cursed)
+// ถ้า confirmed ยังไม่มี → ยังถือว่าไม่โดนฆ่า → ยังเป็นชาวบ้าน
+// ถ้า kill จริงเป็น Cursed และไม่โดน protect → เขียน cursedStatus='wolf' ทันทีในคืนนั้น
 // คืน: { status: 'villager'|'wolf', justTurned, saved }
 async function evaluateCursedNight(code, cursedUid) {
   const snap = await roomRef(code).once('value')
@@ -47,24 +50,25 @@ async function evaluateCursedNight(code, cursedUid) {
     return { status: 'wolf', justTurned: false, saved: false }
   }
 
-  let bitten = false
-  for (const uid in night) {
-    if (uid === 'wolf') continue
-    const a = night[uid] || {}
-    const vote = a.wolfVote || {}
-    if (a.action === 'wolf' && a.nightIndex === nightIndex && a.target === cursedUid) bitten = true
-    if (vote.nightIndex === nightIndex && vote.target === cursedUid) bitten = true
+  // kill จริงในคืนนี้ไม่ใช่ Cursed (หรือยังไม่ confirm) → ยังเป็นชาวบ้าน
+  const confirmed = meta.wolfConfirmed
+  if (confirmed !== cursedUid) {
+    return { status: 'villager', justTurned: false, saved: false }
   }
 
-  if (bitten) {
-    const saved = isProtectedThisNight(night, nightIndex, cursedUid)
-    if (!saved) {
-      await roomRef(code).child('players').child(cursedUid).update({ cursedStatus: 'wolf' })
-      return { status: 'wolf', justTurned: true, saved: false }
-    }
+  // หมาป่าป่วยคืนนี้ (Diseased ตายคืนก่อน) → confirmed นี้ไม่เกิดการฆ่า → ยังเป็นชาวบ้าน
+  if (meta.wolvesSick === true) {
+    return { status: 'villager', justTurned: false, saved: false }
+  }
+
+  // โดน kill จริง → เช็คว่ามีคนช่วย (doctor/bodyguard/witch save) ไหม
+  const saved = isProtectedThisNight(night, nightIndex, cursedUid)
+  if (saved) {
     return { status: 'villager', justTurned: false, saved: true }
   }
-  return { status: 'villager', justTurned: false, saved: false }
+
+  await roomRef(code).child('players').child(cursedUid).update({ cursedStatus: 'wolf' })
+  return { status: 'wolf', justTurned: true, saved: false }
 }
 
 // ชื่อทีมหมาป่าจาก meta.wolfTeammates (ใช้ฝั่ง player + host)

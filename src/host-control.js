@@ -7,6 +7,9 @@ const configSummaryEl = document.getElementById('config-summary')
 const validationBoxEl = document.getElementById('validation-box')
 const btnStart = document.getElementById('btn-start')
 const errorEl = document.getElementById('error-message')
+const winBannerEl = document.getElementById('win-banner')
+const winBannerTitleEl = document.getElementById('win-banner-title')
+const winBannerReasonEl = document.getElementById('win-banner-reason')
 const setupViewEl = document.getElementById('setup-view')
 const gameViewEl = document.getElementById('game-view')
 const roleListEl = document.getElementById('role-list')
@@ -43,7 +46,7 @@ function renderPlayers(players, hostUid) {
   for (const [uid, p] of players.sort((a, b) => a[1].joinedAt - b[1].joinedAt)) {
     const li = document.createElement('li')
     li.className = 'player-row'
-    li.textContent = p.name || '???'
+    li.textContent = ((p.name && p.name.trim()) ? p.name : 'ผู้เล่น-' + String(uid).slice(-4))
     if (uid === hostUid) {
       li.innerHTML += ' <span class="tag tag-host">คนทรง</span>'
     }
@@ -273,6 +276,9 @@ function renderNightSequencer(roomData) {
     : callViewOn ? 'กำลังเรียก Role — รอ action จากเจ้าของ role'
     : meta.wolfConfirmed ? 'Wolf เลือกครบแล้ว — host กด จบกลางคืน · เปิดเช้า'
     : 'กลางคืนเริ่มแล้ว — host เริ่มเรียก Role'
+  if (meta.wolvesSick === true && meta.phase === 'night') {
+    nightSeqStatusEl.textContent = '🤒 หมาป่าป่วย (Diseased คืนก่อน) — คืนนี้หมาป่าฆ่าใครไม่ได้ · ' + nightSeqStatusEl.textContent
+  }
 
   // Night actions ที่มีอยู่ (night/$uid self-write) — รวม wolfVote ของหมาป่า
   const night = roomData.night || {}
@@ -281,7 +287,17 @@ function renderNightSequencer(roomData) {
   actionListEl.innerHTML = ''
   for (const [uid, a] of entries) {
     const li = document.createElement('li')
-    if (a.wolfVote && a.wolfVote.target) {
+    if (a.action === 'cupid') {
+      const ts = a.targets || []
+      li.textContent = nameOf(roomData, uid) + ' → 💘 คู่รัก: ' + ts.map((t) => nameOf(roomData, t)).join(' + ')
+    } else if (a.action === 'witch') {
+      const parts = []
+      if (a.save) parts.push('ยาชุบ @ ' + nameOf(roomData, a.target))
+      if (a.poison) parts.push('ยาพิษ @ ' + nameOf(roomData, a.poisonTarget))
+      li.textContent = nameOf(roomData, uid) + ' → 🧪 แม่มด: ' + (parts.length ? parts.join(' · ') : 'ไม่ใช้ยา')
+    } else if (a.action === 'sorceress') {
+      li.textContent = nameOf(roomData, uid) + ' → 🔮 ตรวจ Seer @ ' + nameOf(roomData, a.target)
+    } else if (a.wolfVote && a.wolfVote.target) {
       li.textContent = nameOf(roomData, uid) + ' → 🐺 เลือกเหยื่อ @ ' + nameOf(roomData, a.wolfVote.target)
     } else {
       li.textContent = nameOf(roomData, uid) + ' → ' + (a.action || '') + (a.target ? (' @ ' + nameOf(roomData, a.target)) : '')
@@ -457,6 +473,15 @@ initAuth().then(() => {
       setupViewEl.classList.add('hidden')
       gameViewEl.classList.remove('hidden')
       renderNightSequencer(roomData)
+      if (winBannerEl && meta.win) {
+        winBannerEl.classList.remove('hidden')
+        const w = meta.win
+        const label = { villagers: 'ชาวบ้านชนะ!', wolves: 'หมาป่าชนะ!', lovers: 'คู่รักชนะ!', fool: 'คนโง่ชนะ!' }
+        winBannerTitleEl.textContent = '🏆 ' + (label[w.winner] || w.winner)
+        winBannerReasonEl.textContent = w.reason || ''
+      } else if (winBannerEl) {
+        winBannerEl.classList.add('hidden')
+      }
       const rp = getPlayers(roomData)
       const allRole = rp.length >= 5 && rp.every(([, p]) => !!p.role)
       btnStart.disabled = !allRole
