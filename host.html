@@ -42,7 +42,44 @@
       <section id="game-view" class="hidden">
         <h3 class="section-title">เกมเริ่มแล้ว — บทบาทของผู้เล่น</h3>
         <ul id="role-list" class="role-list"></ul>
-        <p class="hint">Phase 3 จะเพิ่มระบบควบคุมกลางคืน (เรียก Role, Cursed, Hunter)</p>
+        <div id="night-view" class="hidden" style="margin-top:18px;padding:16px;border:1px solid var(--line);border-radius:12px;">
+          <h3 class="section-title">🌙 กลางคืน · คืนที่ <span id="night-seq-index-el">0</span></h3>
+          <p class="hint" id="night-seq-status-el">ยังไม่เริ่มกลางคืน· host กดเริ่มกลางคืนเพื่อเรียก Role</p>
+
+          <div id="call-role-view" class="hidden" style="margin-top:10px;padding:12px;border:1px dashed var(--line);border-radius:8px;">
+            <div class="setting-name">Role Caller · กำลังเรียก: <span id="call-role-name-el"></span></div>
+            <p class="hint" id="call-role-hint-el" style="margin-top:4px;"></p>
+            <button id="btn-night-call-next" class="btn btn-primary" style="margin-top:8px;">เรียก Role ถัดไป</button>
+          </div>
+
+          <div id="action-view" class="hidden" style="margin-top:10px;padding:12px;border:1px dashed var(--line);border-radius:8px;">
+            <div class="setting-name">Action View · กลางคืน <span id="action-count-el">0</span></div>
+            <ul id="action-list-el" class="player-list" style="margin-top:6px;"></ul>
+          </div>
+
+          <div id="wolf-view" class="hidden" style="margin-top:10px;padding:12px;border:1px dashed var(--line);border-radius:8px;">
+            <div class="setting-name">🐺 Wolf Pick · <span id="wolf-pick-count-el">0</span>/<span id="wolf-pick-total-el">0</span></div>
+            <ul id="wolf-pick-list-el" class="player-list" style="margin-top:6px;"></ul>
+            <div class="setting-name" style="margin-top:10px;">Host Confirm · ยืนยันเป้า:</div>
+            <select id="wolf-confirm-target-el" class="input" style="margin-top:4px;width:100%;"></select>
+            <button id="btn-wolf-confirm" class="btn btn-primary" style="margin-top:8px;">ยืนยัน Wolf ฆ่า</button>
+          </div>
+
+          <div id="afk-view" class="hidden" style="margin-top:10px;padding:12px;border:1px dashed var(--line);border-radius:8px;">
+            <div class="setting-name">⏳ AFK · ยังไม่ตอบ <span id="afk-count-el">0</span></div>
+            <ul id="afk-list-el" class="player-list" style="margin-top:6px;"></ul>
+          </div>
+
+          <div id="cursed-view" class="hidden" style="margin-top:10px;padding:12px;border:1px dashed var(--line);border-radius:8px;">
+            <div class="setting-name">🧟 Cursed Status</div>
+            <p class="hint" id="cursed-info-el" style="margin-top:4px;"></p>
+          </div>
+
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
+            <button id="btn-start-night" class="btn btn-primary">เริ่มกลางคืน</button>
+            <button id="btn-finish-night" class="btn btn-primary hidden">จบกลางคืน → เปิดเช้า</button>
+          </div>
+        </div>
       </section>
     </main>
   </div>

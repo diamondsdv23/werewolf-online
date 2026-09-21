@@ -204,6 +204,152 @@ async function assignRolesAndStart() {
 btnStart.addEventListener('click', assignRolesAndStart)
 settingListEl.addEventListener('click', handleSettingClick)
 
+
+// ============ Phase 3 · HOST NIGHT SEQUENCER ============
+const nightViewEl = document.getElementById('night-view')
+const nightSeqIndexEl = document.getElementById('night-seq-index-el')
+const nightSeqStatusEl = document.getElementById('night-seq-status-el')
+const callRoleViewEl = document.getElementById('call-role-view')
+const callRoleNameEl = document.getElementById('call-role-name-el')
+const btnNightCallNextEl = document.getElementById('btn-night-call-next')
+const actionViewEl = document.getElementById('action-view')
+const actionListEl = document.getElementById('action-list-el')
+const wolfViewEl = document.getElementById('wolf-view')
+const wolfPickCountEl = document.getElementById('wolf-pick-count-el')
+const wolfPickTotalEl = document.getElementById('wolf-pick-total-el')
+const wolfPickListEl = document.getElementById('wolf-pick-list-el')
+const wolfConfirmTargetEl = document.getElementById('wolf-confirm-target-el')
+const btnWolfConfirmEl = document.getElementById('btn-wolf-confirm')
+const afkViewEl = document.getElementById('afk-view')
+const afkListEl = document.getElementById('afk-list-el')
+const cursedViewEl = document.getElementById('cursed-view')
+const cursedInfoEl = document.getElementById('cursed-info-el')
+const btnStartNightEl = document.getElementById('btn-start-night')
+const btnFinishNightEl = document.getElementById('btn-finish-night')
+
+let lastNightRenderRoomData = null
+
+function nightRoleHasAction(roleId) {
+  return ROLE_NIGHT_ACTIONS.has(roleId)
+}
+
+function nameOf(roomData, uid) {
+  const p = (roomData && roomData.players && roomData.players[uid]) || {}
+  return p.name || uid
+}
+
+function wolfLike(roomData, uid) {
+  const p = (roomData && roomData.players && roomData.players[uid]) || {}
+  return p.role === 'werewolf' || p.role === 'cursed' || p.role === 'sorceress'
+}
+
+function renderNightSequencer(roomData) {
+  lastNightRenderRoomData = roomData
+  if (!roomData || !nightViewEl) return
+  const meta = roomData.meta || {}
+  const isNight = meta.phase === 'night'
+  nightViewEl.classList.toggle('hidden', !isNight)
+  if (!isNight) return
+  nightSeqIndexEl.textContent = String(meta.nightIndex || 0)
+
+  // Role Caller — hostCall ส่งผ่าน meta (hostCallNextRole เขียน meta/hostCall)
+  const call = meta.hostCall || ''
+  const callViewOn = call && call !== 'DONE'
+  callRoleViewEl.classList.toggle('hidden', !callViewOn)
+  if (callViewOn) {
+    const r = getRoleInfo(call)
+    callRoleNameEl.textContent = (r ? r.nameTh + ' (' + r.nameEn + ')' : call) + ' ← เรียกผ่านหน้าหมวกของแต่ละคน'
+  }
+  nightSeqStatusEl.textContent =
+    call === 'DONE' ? 'เรียกครบแล้ว — host ยืนยัน Wolf แล้วกด จบกลางคืน'
+    : callViewOn ? 'กำลังเรียก Role — รอ action จากเจ้าของ role'
+    : meta.wolfConfirmed ? 'Wolf เลือกครบแล้ว — host กด จบกลางคืน · เปิดเช้า'
+    : 'กลางคืนเริ่มแล้ว — host เริ่มเรียก Role'
+
+  // Night actions ที่มีอยู่ (night/$uid self-write)
+  const night = roomData.night || {}
+  const entries = Object.entries(night).filter(([uid, a]) => a && a.action && uid !== 'wolf')
+  actionViewEl.classList.toggle('hidden', entries.length === 0)
+  actionListEl.innerHTML = ''
+  for (const [uid, a] of entries) {
+    const li = document.createElement('li')
+    li.textContent = nameOf(roomData, uid) + ' → ' + (a.action || '') + (a.target ? (' @ ' + nameOf(roomData, a.target)) : '')
+    actionListEl.appendChild(li)
+  }
+
+  // Wolf picks (action=wolf ที่เขียนคืนนี้) + AFK gathering
+  const voted = new Set()
+  const wolfTargets = new Set()
+  for (const [uid, a] of entries) {
+    if (a.action !== 'wolf') continue
+    voted.add(uid)
+    if (a.target) wolfTargets.add(a.target)
+  }
+  const allPlayers = Object.entries(roomData.players || {})
+  const wolfPlayers = allPlayers.filter(([uid, p]) => p.role === 'werewolf' || p.role === 'wolf_cub' || (p.role === 'cursed' && p.cursed === true))
+  wolfPickCountEl.textContent = String(wolfTargets.size)
+  wolfPickTotalEl.textContent = String(wolfPlayers.length)
+  const pickedNames = [...wolfTargets].map((u) => nameOf(roomData, u))
+  wolfPickListEl.innerHTML = ''
+  for (const [uid, p] of wolfPlayers) {
+    const li = document.createElement('li')
+    li.textContent = nameOf(roomData, uid) + (voted.has(uid) ? ' ✓ เลือกแล้ว' : ' ⏳ ยังไม่เลือก')
+    wolfPickListEl.appendChild(li)
+  }
+
+  // Host confirm wolf — select เป้าที่ Wolf โหวต
+  wolfConfirmTargetEl.innerHTML = ''
+  const targetNames = {}
+  for (const uid of wolfTargets) {
+    const opt = document.createElement('option')
+    opt.value = uid
+    opt.textContent = nameOf(roomData, uid)
+    wolfConfirmTargetEl.appendChild(opt)
+  }
+  wolfConfirmTargetEl.classList.toggle('hidden', wolfTargets.size === 0)
+  btnWolfConfirmEl.disabled = wolfTargets.size === 0 || !!meta.wolfConfirmed
+
+  // AFK — role ที่มี action กลางคืนยังไม่เขียนคืนนี้
+  const acted = new Set([...entries.map(([uid]) => uid)])
+  const afkList = allPlayers.filter(([uid, p]) => nightRoleHasAction(p.role) && !acted.has(uid))
+  afkViewEl.classList.toggle('hidden', afkList.length === 0)
+  afkListEl.innerHTML = ''
+  for (const [uid] of afkList) {
+    const li = document.createElement('li')
+    li.textContent = nameOf(roomData, uid)
+    afkListEl.appendChild(li)
+  }
+
+  // Cursed status
+  const cursed = allPlayers.filter(([, p]) => p.role === 'cursed')
+  cursedViewEl.classList.toggle('hidden', cursed.length === 0)
+  cursedInfoEl.textContent = cursed.length ? cursed.map(([uid, p]) => nameOf(roomData, uid) + (p.cursed ? ' (กลายเป็นหมาป่า)' : ' (ยังเป็นชาวบ้าน)')).join(', ') : '—'
+}
+
+btnStartNightEl.addEventListener('click', () => {
+  hostStartNight(code)
+    .then(() => { nightSeqStatusEl.textContent = 'กลางคืนเริ่มแล้ว — host เริ่มเรียก Role' })
+    .catch((err) => showError('เริ่มกลางคืนไม่สำเร็จ: ' + err.message))
+})
+
+btnNightCallNextEl.addEventListener('click', () => {
+  hostCallNextRole(code).then(() => {}).catch((err) => showError('เรียก Role ถัดไปไม่สำเร็จ: ' + err.message))
+})
+
+btnWolfConfirmEl.addEventListener('click', () => {
+  const target = wolfConfirmTargetEl.value
+  if (!target) return
+  hostConfirmWolf(code, target).then(() => {}).catch((err) => showError('ยืนยัน Wolf ไม่สำเร็จ: ' + err.message))
+})
+
+btnFinishNightEl.addEventListener('click', () => {
+  hostFinishNight(code).then(() => {}).catch((err) => showError('จบกลางคืนไม่สำเร็จ: ' + err.message))
+})
+
+const ROLE_NIGHT_ACTIONS = new Set([
+  'werewolf', 'wolf_cub', 'sorceress', 'cursed',
+  'seer', 'doctor', 'bodyguard', 'witch',
+])
 initAuth().then(() => {
   const r = roomRef(code)
   r.on('value', (snap) => {
@@ -237,6 +383,7 @@ initAuth().then(() => {
     } else {
       setupViewEl.classList.add('hidden')
       gameViewEl.classList.remove('hidden')
+      renderNightSequencer(roomData)
       roleListEl.innerHTML = ''
       const entries = getPlayers(data).sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0))
       for (const [uid, p] of entries) {
