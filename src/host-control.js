@@ -264,7 +264,7 @@ function renderNightSequencer(roomData) {
   const callViewOn = meta.phase === 'night' || (call && call !== 'DONE')
   callRoleViewEl.classList.toggle('hidden', !callViewOn)
   if (callViewOn) {
-    const r = getRoleInfo(call)
+    const r = getRole(call)
     callRoleNameEl.textContent = (r ? r.nameTh + ' (' + r.nameEn + ')' : call) + ' ← เรียกผ่านหน้าหมวกของแต่ละคน'
   }
   nightSeqStatusEl.textContent =
