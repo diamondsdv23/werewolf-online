@@ -248,7 +248,8 @@ function renderNightSequencer(roomData) {
   if (!roomData || !nightViewEl) return
   const meta = roomData.meta || {}
   const isNight = meta.phase === 'night'
-  if (isNight) {
+  const showNightPanel = meta.phase === 'night' || meta.phase === 'role'
+  if (showNightPanel) {
     nightViewEl.classList.remove('hidden')
     nightViewEl.style.display = ''
   } else {
