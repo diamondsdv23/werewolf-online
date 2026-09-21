@@ -114,24 +114,13 @@ async function hostCallNextRole(code) {
 // wolf: night/wolf/$uid/{target}
 
 async function hostConfirmWolf(code, targetUid) {
+  // confirm เฉยๆ — ไม่เช็คชนะตรงนี้ เพราะตอนยังไม่ apply dead/save/poison/cursed/lovers
+  // state ยังค้างกลางคืน จะเช็คผิด → เช็คชนะที่ hostFinishNight เท่านั้น (apply ครบแล้ว)
   const r = roomRef(code)
-  const updates = {
+  await r.update({
     'meta/wolfConfirmed': targetUid,
     'meta/hostCall': '', // จบขั้น wolf
-  }
-  // confirm เป้าแล้ว → เช็คเงื่อนไขชนะทันที (จาก state ปัจจุบันก่อนจบคืน)
-  try {
-    const snap = await r.once('value')
-    const data = snap.val() || {}
-    const win = checkWinCondition(data.players || {}, data.meta || {})
-    if (win) {
-      updates['meta/win'] = win
-      updates['meta/phase'] = 'end'
-    }
-  } catch (e) {
-    // ไม่บล็อก flow หลัก (เช็คชนะรอบสุดท้ายที่ hostFinishNight)
-  }
-  await r.update(updates)
+  })
 }
 
 async function hostFinishNight(code) {
@@ -234,17 +223,21 @@ async function hostFinishNight(code) {
   }
 
   // ===== 6. cursed transform =====
+  // กลไกตามแผน: Cursed ถูกกัดจริง (ไม่โดน save) → กลายเป็นหมาป่าแทนที่จะตาย (ไม่ตาย)
+  // - ถูกกัด + ไม่ save → ไม่ตาย + กลายเป็นหมาป่า (undo ความตาย)
+  // - ถูกกัด + save → ยังเป็นชาวบ้าน (dead ไม่มีชื่ออยู่แล้ว เพราะถูกกันไว้ที่ apply)
+  // - ตายจากเหตุอื่น (poison/โหวต) → ตายปกติ ไม่แปลง
   const updates = {}
-  const wasCursedVictim = wolfVictim && players[wolfVictim] && players[wolfVictim].role === 'cursed'
-  if (wasCursedVictim && !dead[wolfVictim]) {
-    // ถูกกัดแต่รอด (มีคนช่วย) → ยังไม่เป็นหมาป่า (ต้องตายจากกัด/ถูก kill จริงเท่านั้นถึงเป็น)
-  } else if (wasCursedVictim && dead[wolfVictim]) {
-    // ถูกกัดตาย → Cursed กลายเป็นหมาป่าและตาย → เกมนับเป็นฝ่ายหมาป่า
+  const deadUids = Object.keys(dead)
+  const wasCursedVictim = wolfVictim && players[wolfVictim] && players[wolfVictim].role === 'cursed' && dead[wolfVictim] === 'wolf'
+  if (wasCursedVictim && !saved[wolfVictim]) {
     updates['players/' + wolfVictim + '/cursedStatus'] = 'wolf'
+    const ci = deadUids.indexOf(wolfVictim)
+    if (ci >= 0) deadUids.splice(ci, 1) // undo คำว่า "ตาย"
+    delete dead[wolfVictim]
   }
 
-  // ===== 6. alive flags =====
-  const deadUids = Object.keys(dead)
+  // ===== 7. alive flags =====
   for (const uid of deadUids) {
     updates['players/' + uid + '/alive'] = false
     const role = getRole((players[uid] || {}).role)
