@@ -71,7 +71,15 @@ function buildNightForm(data, role, me) {
   const wolf = isWolfCallRole(me)
 
   if (wolf) {
-    label.textContent = '🐺 เลือกเหยื่อ (กับหมาป่าทีมเดียวกันผ่าน host):'
+    label.textContent = '🐺 เลือกเหยื่อ (กับหมาป่าทีมเดียวกัน — เห็นกัน ไม่มีแชท):'
+    const mates = (data.meta && data.meta.wolfTeammates) || []
+    if (mates.length) {
+      const chips = document.createElement('div')
+      chips.className = 'hint'
+      chips.style.cssText = 'margin-top:6px;color:var(--danger);'
+      chips.textContent = '🐺 ทีม: ' + mates.map((u) => playerName((data.players || {})[u], u)).join(', ')
+      nightActionFormEl.appendChild(chips)
+    }
     const targets = aliveTargets(data, true)
     const sel = makeSelect(targets)
     btn.textContent = 'ยืนยันเลือกเหยื่อ'
@@ -233,8 +241,13 @@ function buildNightForm(data, role, me) {
         btn.textContent = 'ส่งแล้ว...'
         try {
           await playerNightAction(code, { action: role.id, target })
-          nightActionDoneEl.classList.remove('hidden')
           nightActionFormEl.innerHTML = ''
+          if (role.id === 'seer' || role.id === 'aura_seer' || role.id === 'sorceress') {
+            showCheckResult(data, '✅ ส่งผลตรวจแล้ว — ปิดตาได้')
+          } else {
+            nightActionDoneEl.classList.remove('hidden')
+            nightActionDoneEl.textContent = '✅ ส่ง action แล้ว — ปิดตาได้'
+          }
         } catch (e) {
           btn.disabled = false
           btn.textContent = d[1]
@@ -274,6 +287,23 @@ function useNightActionUI(data, meta) {
     return
   }
 
+  const wolfTeam = (meta.wolfTeammates || []).indexOf(getUserId()) >= 0
+  const myEntry = (data.night || {})[getUserId()] || {}
+  const isCurNight = myEntry.nightIndex === (meta.nightIndex || 0)
+  const doneWolfPick = isCurNight && myEntry.wolfVote && myEntry.wolfVote.nightIndex === (meta.nightIndex || 0)
+  const doneOwnTask = isCurNight && myEntry.action === role.id
+
+  // หมาป่า (werewolf/wolf_cub/sorceress/cursed-กลายร่าง) ตอบที่ step 'werewolf' — เห็นกัน ไม่มีแชท
+  if (call === 'werewolf' && wolfTeam) {
+    if (doneWolfPick) {
+      nightActionStatusEl.textContent = '✅ เลือกเหยื่อแล้ว — รอหมาป่าทีมอื่น / host ยืนยัน'
+      return
+    }
+    nightActionStatusEl.textContent = '🐺 host เรียกหมาป่า — ลืมตาเลือกเหยื่อร่วมกัน'
+    buildNightForm(data, null, me)
+    return
+  }
+
   if (call !== role.id) {
     nightActionStatusEl.textContent =
       call ? '🌙 host กำลังเรียก: ' + (getRole(call) ? getRole(call).nameTh : call) + ' — ยังไม่ถึงตาเรา'
@@ -289,13 +319,49 @@ function useNightActionUI(data, meta) {
     return
   }
 
-  // cursed ยังไม่ถูกกัด → ไม่ต้องตอบอะไรตอนกลางคืน
-  if (role.id === 'cursed' && me.cursedStatus !== 'wolf') {
-    nightActionStatusEl.textContent = '🌙 host กำลังเรียก: ' + role.nameTh + ' (ยังเป็นชาวบ้าน — ปิดตาได้)'
+  // cursed: ถูกเรียกทุกคืน → ระบบแจ้งสถานะทันทีในคืนนั้น
+  if (role.id === 'cursed') {
+    if (me.cursedStatus === 'wolf') {
+      nightActionStatusEl.textContent = '🌙 host เรียก Cursed — กลายเป็นหมาป่าแล้ว! 🐺 เหล่าหมาป่า: ' + wolfTeamNames(data) + ' (ร่วมเลือกเหยื่อได้คืนถัดไป)'
+    } else {
+      nightActionStatusEl.textContent = '🌙 host เรียก Cursed — ยังเป็นชาวบ้าน (ยังไม่ถูกกัด — ปิดตาได้)'
+    }
+    return
+  }
+
+  // เขียน action แล้วในคืนนี้ → กันฟอร์มเด้งกลับ + แสดงผลตรวจถ้ามี
+  if (doneOwnTask) {
+    if (role.id === 'seer' || role.id === 'aura_seer' || role.id === 'sorceress') {
+      nightActionStatusEl.textContent = '✅ ส่งผลตรวจแล้ว — รอ host ประกาศ'
+      showCheckResult(data, '✅ ส่งผลตรวจแล้ว — ปิดตาได้')
+    } else {
+      nightActionStatusEl.textContent = '✅ ส่ง action แล้ว — ปิดตาได้'
+    }
     return
   }
 
   buildNightForm(data, role, me)
+}
+
+// แสดงผลตรวจ (จาก meta/results/$uid ที่ host echo) ถ้ามีในคืนนี้ ไม่งั้น fallback
+function showCheckResult(data, fallback) {
+  if (!nightActionDoneEl) return
+  const meta = data.meta || {}
+  const mine = (meta.results || {})[getUserId()]
+  nightActionDoneEl.classList.remove('hidden')
+  if (mine && mine.nightIndex === (meta.nightIndex || 0)) {
+    if (mine.isWolf !== undefined) {
+      nightActionDoneEl.textContent = mine.name + (mine.isWolf ? ' คือหมาป่า! 🔮' : ' คือชาวบ้าน 🔮')
+    } else if (mine.isSeer !== undefined) {
+      nightActionDoneEl.textContent = mine.name + (mine.isSeer ? ' คือ Seer! 🐺' : ' ไม่ใช่ Seer 🐺')
+    } else if (mine.nameTh) {
+      nightActionDoneEl.textContent = mine.name + ' คือ ' + mine.nameTh + ' 🌟'
+    } else {
+      nightActionDoneEl.textContent = fallback
+    }
+  } else {
+    nightActionDoneEl.textContent = fallback
+  }
 }
 
 if (!code) {

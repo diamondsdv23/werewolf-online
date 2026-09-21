@@ -133,8 +133,9 @@ async function hostFinishNight(code) {
   for (const uid in night) {
     if (uid === 'wolf') continue
     const a = night[uid] || {}
-    if (a.action === 'wolf' && a.nightIndex === nightIndex && a.target) {
-      wolfPicks[uid] = { target: a.target, nightIndex: a.nightIndex }
+    const av = a.wolfVote || {}
+    if (av.target && av.nightIndex === nightIndex) {
+      wolfPicks[uid] = { target: av.target, nightIndex: av.nightIndex }
     }
   }
 
@@ -158,6 +159,7 @@ async function hostFinishNight(code) {
   for (const uid in night) {
     if (uid === 'wolf') continue
     const action = night[uid] || {}
+    if (action.nightIndex !== nightIndex) continue
     const role = getRole((players[uid] || {}).role)
     if (!role) continue
     if ((role.id === 'doctor' || role.id === 'bodyguard' || role.id === 'witch') && action.target) {
@@ -175,6 +177,7 @@ async function hostFinishNight(code) {
   for (const uid in night) {
     if (uid === 'wolf') continue
     const action = night[uid] || {}
+    if (action.nightIndex !== nightIndex) continue
     const role = getRole((players[uid] || {}).role)
     if (role && role.id === 'witch' && action.poison && action.poisonTarget) {
       poisonTarget = action.poisonTarget
@@ -193,7 +196,27 @@ async function hostFinishNight(code) {
     dead[poisonTarget] = 'poison'
   }
 
-  // ===== 5. cursed transform =====
+  // ===== 5. lovers (Cupid คืนแรก) =====
+  let lovers = null
+  for (const uid in night) {
+    if (uid === 'wolf') continue
+    const a = night[uid] || {}
+    const role = getRole((players[uid] || {}).role)
+    if (role && role.id === 'cupid' && a.action === 'cupid' && a.nightIndex === 1 && a.targets && a.targets.length === 2) {
+      lovers = a.targets
+      break
+    }
+  }
+  if (lovers) updates['meta/lovers'] = lovers
+  if (lovers) {
+    // คนหนึ่งตาย → อีกคนตายตามทันที (ทุกสาเหตุ)
+    for (const l of lovers) {
+      const other = lovers[0] === l ? lovers[1] : lovers[0]
+      if (dead[l] && !dead[other]) dead[other] = 'lover'
+    }
+  }
+
+  // ===== 6. cursed transform =====
   const updates = {}
   const wasCursedVictim = wolfVictim && players[wolfVictim] && players[wolfVictim].role === 'cursed'
   if (wasCursedVictim && !dead[wolfVictim]) {
@@ -242,24 +265,25 @@ function playerIsWolfCubKilled(victim, players) {
 
 // ===================== PLAYER =====================
 
-// หมาป่าเลือกเหยื่อ (เขียน night/wolf/$uid/target)
+// หมาป่าเลือกเหยื่อ (wolfVote เก็บใน night/$uid — self-write ตาม rules ที่ publish อยู่แล้ว
+// ใช้ update ไม่ใช่ set เพื่อให้ sorceress ที่ตรวจทีหลังไม่ลบ wolf vote ของตัวเอง)
 async function playerWolfPick(code, targetUid) {
   const uid = getUserId()
   const metaSnap = await metaNightRef(code).child('nightIndex').once('value')
   const nightIndex = metaSnap.val() || 0
-  await wolfActionsRef(code).child(uid).set({
-    action: 'wolf',
-    target: targetUid,
-    nightIndex,
-    at: firebase.database.ServerValue.TIMESTAMP,
+  await nightRef(code).child(uid).update({
+    wolfVote: { target: targetUid, nightIndex },
   })
 }
 
-// ผู้เล่นเขียน action ของตัวเอง (night/$uid/action)
+// ผู้เล่นเขียน action ของตัวเอง (night/$uid — update กันลบ wolfVote)
 async function playerNightAction(code, action) {
   const uid = getUserId()
-  await nightRef(code).child(uid).set({
+  const metaSnap = await metaNightRef(code).child('nightIndex').once('value')
+  const nightIndex = metaSnap.val() || 0
+  await nightRef(code).child(uid).update({
     ...action,
+    nightIndex,
     at: firebase.database.ServerValue.TIMESTAMP,
   })
 }

@@ -228,6 +228,7 @@ const btnStartNightEl = document.getElementById('btn-start-night')
 const btnFinishNightEl = document.getElementById('btn-finish-night')
 
 let lastNightRenderRoomData = null
+let cursedEvalSig = ''
 
 function nightRoleHasAction(roleId) {
   return ROLE_NIGHT_ACTIONS.has(roleId)
@@ -273,27 +274,32 @@ function renderNightSequencer(roomData) {
     : meta.wolfConfirmed ? 'Wolf เลือกครบแล้ว — host กด จบกลางคืน · เปิดเช้า'
     : 'กลางคืนเริ่มแล้ว — host เริ่มเรียก Role'
 
-  // Night actions ที่มีอยู่ (night/$uid self-write)
+  // Night actions ที่มีอยู่ (night/$uid self-write) — รวม wolfVote ของหมาป่า
   const night = roomData.night || {}
-  const entries = Object.entries(night).filter(([uid, a]) => a && a.action && uid !== 'wolf')
+  const entries = Object.entries(night).filter(([uid, a]) => a && (a.action || a.wolfVote) && uid !== 'wolf')
   actionViewEl.classList.toggle('hidden', entries.length === 0)
   actionListEl.innerHTML = ''
   for (const [uid, a] of entries) {
     const li = document.createElement('li')
-    li.textContent = nameOf(roomData, uid) + ' → ' + (a.action || '') + (a.target ? (' @ ' + nameOf(roomData, a.target)) : '')
+    if (a.wolfVote && a.wolfVote.target) {
+      li.textContent = nameOf(roomData, uid) + ' → 🐺 เลือกเหยื่อ @ ' + nameOf(roomData, a.wolfVote.target)
+    } else {
+      li.textContent = nameOf(roomData, uid) + ' → ' + (a.action || '') + (a.target ? (' @ ' + nameOf(roomData, a.target)) : '')
+    }
     actionListEl.appendChild(li)
   }
 
-  // Wolf picks (action=wolf ที่เขียนคืนนี้) + AFK gathering
+  // Wolf picks (night/$uid.wolfVote คืนนี้) + AFK gathering
   const voted = new Set()
   const wolfTargets = new Set()
   for (const [uid, a] of entries) {
-    if (a.action !== 'wolf') continue
+    const av = a.wolfVote || {}
+    if (!av.target || av.nightIndex !== meta.nightIndex) continue
     voted.add(uid)
-    if (a.target) wolfTargets.add(a.target)
+    wolfTargets.add(av.target)
   }
   const allPlayers = Object.entries(roomData.players || {})
-  const wolfPlayers = allPlayers.filter(([uid, p]) => p.role === 'werewolf' || p.role === 'wolf_cub' || (p.role === 'cursed' && p.cursed === true))
+  const wolfPlayers = allPlayers.filter(([uid, p]) => p.role === 'werewolf' || p.role === 'wolf_cub' || p.role === 'sorceress' || (p.role === 'cursed' && p.cursedStatus === 'wolf'))
   wolfPickCountEl.textContent = String(wolfTargets.size)
   wolfPickTotalEl.textContent = String(wolfPlayers.length)
   const pickedNames = [...wolfTargets].map((u) => nameOf(roomData, u))
@@ -327,10 +333,69 @@ function renderNightSequencer(roomData) {
     afkListEl.appendChild(li)
   }
 
-  // Cursed status
+  // Cursed status (ลด กับการเรียกทุกคืน - hostCall==='cursed')
   const cursed = allPlayers.filter(([, p]) => p.role === 'cursed')
   cursedViewEl.classList.toggle('hidden', cursed.length === 0)
-  cursedInfoEl.textContent = cursed.length ? cursed.map(([uid, p]) => nameOf(roomData, uid) + (p.cursed ? ' (กลายเป็นหมาป่า)' : ' (ยังเป็นชาวบ้าน)')).join(', ') : '—'
+  cursedInfoEl.textContent = cursed.length
+    ? cursed.map(([uid, p]) => cursedStatusText(p, nameOf(roomData, uid))).join(', ')
+    : '—'
+
+  // เมื่อ host เรียก Cursed → ระบบประเมินทันทีว่าถูกกัดคืนนี้ไหม แล้วเขียนสถานะ (แจ้งในคืนนั้น)
+  const callId = meta.hostCall || ''
+  if (callId === 'cursed' && cursedEvalSig !== meta.nightIndex + ':cursed' && cursed.length) {
+    cursedEvalSig = meta.nightIndex + ':cursed'
+    const cuid = cursed[0][0]
+    evaluateCursedNight(code, cuid).then((res) => {
+      const txt = res.justTurned
+        ? 'ถูกหมาป่ากัดแล้ว → กลายเป็นหมาป่าแล้วในคืนนี้! ระบบแจ้ง Cursed ทันที'
+        : (res.status === 'wolf'
+          ? 'กลายเป็นหมาป่าแล้ว (จากคืนก่อน)'
+          : (res.saved ? 'ถูกหมาป่ากัด แต่มีคนช่วย → ยังเป็นชาวบ้าน' : 'ยังเป็นชาวบ้าน (ยังไม่ถูกกัดในคืนนี้)'))
+      cursedInfoEl.textContent = nameOf(roomData, cuid) + ' → ' + txt
+    }).catch(() => {})
+  }
+
+  // ผลตรวจ seer / aura_seer / sorceress → echo ไป meta/results/$uid (player เห็นผลทันที)
+  echoCheckResults(roomData).catch(() => {})
+}
+
+// คำนวณผลตรวจจาก night action แล้ว echo ไป meta/results/$uid (host เขียน meta ได้)
+// เขียนเฉพาะเมื่อผลเปลี่ยน (กัน loop) — player อ่าน meta ได้
+async function echoCheckResults(data) {
+  const meta = data.meta || {}
+  const players = data.players || {}
+  const night = data.night || {}
+  const nightIndex = meta.nightIndex || 0
+  const prevResults = meta.results || {}
+  const updates = {}
+  let changed = false
+
+  for (const uid in night) {
+    if (uid === 'wolf') continue
+    const a = night[uid] || {}
+    const roleId = (players[uid] || {}).role
+    if (!roleId || (roleId !== 'seer' && roleId !== 'aura_seer' && roleId !== 'sorceress')) continue
+    if (!a.target || a.nightIndex !== nightIndex) continue
+
+    const tgt = players[a.target] || {}
+    const tgtRole = getRole(tgt.role)
+    let result
+    if (roleId === 'seer') {
+      result = { nightIndex: nightIndex, isWolf: isWolfSide(tgt), name: nameOf(data, a.target) }
+    } else if (roleId === 'aura_seer') {
+      result = { nightIndex: nightIndex, roleId: (tgtRole || {}).id || '?', nameTh: (tgtRole || {}).nameTh || '?' }
+    } else {
+      result = { nightIndex: nightIndex, isSeer: tgt.role === 'seer', name: nameOf(data, a.target) }
+    }
+
+    const prev = prevResults[uid] || {}
+    if (JSON.stringify(result) !== JSON.stringify(prev)) {
+      updates['meta/results/' + uid] = result
+      changed = true
+    }
+  }
+
+  if (changed) await roomRef(code).update(updates)
 }
 
 btnStartNightEl.addEventListener('click', () => {
@@ -356,7 +421,7 @@ btnFinishNightEl.addEventListener('click', () => {
 
 const ROLE_NIGHT_ACTIONS = new Set([
   'werewolf', 'wolf_cub', 'sorceress', 'cursed',
-  'seer', 'doctor', 'bodyguard', 'witch',
+  'seer', 'aura_seer', 'doctor', 'bodyguard', 'witch', 'cupid',
 ])
 initAuth().then(() => {
   const r = roomRef(code)
