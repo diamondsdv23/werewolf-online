@@ -11,6 +11,7 @@
   <script defer src="src/firebase.js"></script>
   <script defer src="src/roles.js"></script>
   <script defer src="src/game.js"></script>
+  <script defer src="src/night.js"></script>
   <script defer src="src/player.js"></script>
 </head>
 <body>
@@ -28,6 +29,13 @@
         <h2 id="role-name" class="role-card-name">---</h2>
         <p id="role-desc" class="role-card-desc"></p>
         <p class="hint">จำบทบาทตัวเองไว้ อย่าให้ใครรู้</p>
+      </section>
+
+      <section id="night-action-view" class="hidden" style="margin-top:16px;padding:16px;border:1px solid var(--line);border-radius:12px;">
+        <h3 class="section-title">🌙 กลางคืน</h3>
+        <p class="hint" id="night-action-status-el">รอ host เรียก...</p>
+        <div id="night-action-form"></div>
+        <p class="hint" id="night-action-done-el" style="margin-top:8px;">✅ ตอบแล้ว รอ finish กลางคืน</p>
       </section>
 
       <section id="waiting-view">
