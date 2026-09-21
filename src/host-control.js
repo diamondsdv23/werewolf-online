@@ -235,7 +235,7 @@ function nightRoleHasAction(roleId) {
 
 function nameOf(roomData, uid) {
   const p = (roomData && roomData.players && roomData.players[uid]) || {}
-  return p.name || uid
+  return (p.name && p.name.trim()) ? p.name : 'ผู้เล่น-' + String(uid).slice(-4)
 }
 
 function wolfLike(roomData, uid) {
@@ -404,7 +404,7 @@ initAuth().then(() => {
         li.className = 'role-list-item'
         li.innerHTML =
           '<img class="role-icon" src="assets/roles/' + role.icon + '" alt="' + role.nameTh + '" />' +
-          '<div class="role-list-info"><div class="player-name">' + (p.name || '???') + '</div>' +
+          '<div class="role-list-info"><div class="player-name">' + ((p.name && p.name.trim()) ? p.name : 'ผู้เล่น-' + String(uid).slice(-4)) + '</div>' +
           '<div class="role-name">' + role.nameTh + ' <em>' + role.nameEn + '</em></div></div>'
         roleListEl.appendChild(li)
       }

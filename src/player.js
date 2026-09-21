@@ -23,6 +23,11 @@ function getMe(data) {
   return (data.players && data.players[getUserId()]) || null
 }
 
+function playerName(p, uid) {
+  const n = (p && p.name) || ''
+  return (n.trim() ? n : 'ผู้เล่น-' + String(uid || '').slice(-4))
+}
+
 function aliveTargets(data, excludeSelf) {
   const all = Object.entries(data.players || {})
     .filter(([uid, p]) => p && p.role && p.alive !== false && (!excludeSelf || uid !== getUserId()))
@@ -30,33 +35,45 @@ function aliveTargets(data, excludeSelf) {
   return all
 }
 
-function wolfCall(roleId) {
-  return roleId === 'werewolf' || roleId === 'wolf_cub' || roleId === 'sorceress' ||
-    (roleId === 'cursed' && true)
+function isWolfCallRole(me) {
+  if (me.role === 'werewolf' || me.role === 'wolf_cub' || me.role === 'sorceress') return true
+  if (me.role === 'cursed') return me.cursedStatus === 'wolf'
+  return false
 }
 
-function buildNightForm(data, role) {
-  nightActionFormEl.innerHTML = ''
-  const targets = aliveTargets(data, wolfCall(role.id))
-  const targetNames = Object.fromEntries(targets.map(([uid, p]) => [uid, p.name || uid]))
-
+function makeSelect(targets, placeholder) {
   const sel = document.createElement('select')
   sel.className = 'input'
   sel.style.cssText = 'margin-top:6px;width:100%;'
+  if (placeholder) {
+    const ph = document.createElement('option')
+    ph.value = ''
+    ph.textContent = placeholder
+    sel.appendChild(ph)
+  }
   for (const [uid, p] of targets) {
     const opt = document.createElement('option')
     opt.value = uid
-    opt.textContent = p.name || uid
+    opt.textContent = playerName(p, uid)
     sel.appendChild(opt)
   }
+  return sel
+}
+
+function buildNightForm(data, role, me) {
+  nightActionFormEl.innerHTML = ''
   const btn = document.createElement('button')
   btn.className = 'btn btn-primary'
   btn.style.cssText = 'margin-top:8px;'
   const label = document.createElement('div')
   label.className = 'setting-name'
 
-  if (wolfCall(role.id)) {
+  const wolf = isWolfCallRole(me)
+
+  if (wolf) {
     label.textContent = '🐺 เลือกเหยื่อ (กับหมาป่าทีมเดียวกันผ่าน host):'
+    const targets = aliveTargets(data, true)
+    const sel = makeSelect(targets)
     btn.textContent = 'ยืนยันเลือกเหยื่อ'
     btn.addEventListener('click', async () => {
       const target = sel.value
@@ -73,45 +90,173 @@ function buildNightForm(data, role) {
         showError('ส่งไม่สำเร็จ: ' + e.message)
       }
     })
-  } else {
-    const descMap = {
-      seer: ['🔮 ผู้หยั่งรู้ — ตรวจผู้เล่น 1 คน', 'ยืนยันตรวจ'],
-      aura_seer: ['🌟 ผู้หยั่งรู้ออร่า — ตรวจผู้เล่น 1 คน', 'ยืนยันตรวจ'],
-      doctor: ['💉 หมอ — เลือกปกป้อง 1 คน (ห้ามเป็นตัวเอง)', 'ยืนยันปกป้อง'],
-      bodyguard: ['🛡️ บอดี้การ์ด — เลือกปกป้อง 1 คน', 'ยืนยันปกป้อง'],
-      witch: ['🧪 แม่มด — เลือกคนช่วย 1 คน (คืนนี้กันตาย)', 'ยืนยันช่วย'],
-    }
-    const d = descMap[role.id]
-    label.textContent = d[0]
-    btn.textContent = d[1]
-    btn.addEventListener('click', async () => {
-      const target = sel.value
-      if (!target) return
-      btn.disabled = true
-      btn.textContent = 'ส่งแล้ว...'
-      try {
-        await playerNightAction(code, { action: role.id, target })
-        nightActionDoneEl.classList.remove('hidden')
-        nightActionFormEl.innerHTML = ''
-      } catch (e) {
-        btn.disabled = false
-        btn.textContent = d[1]
-        showError('ส่งไม่สำเร็จ: ' + e.message)
-      }
-    })
+    nightActionFormEl.appendChild(label)
+    nightActionFormEl.appendChild(sel)
+    nightActionFormEl.appendChild(btn)
+    return
   }
 
-  const labelWrap = document.createElement('label')
-  labelWrap.appendChild(label)
-  nightActionFormEl.appendChild(labelWrap)
-  nightActionFormEl.appendChild(sel)
-  nightActionFormEl.appendChild(btn)
+  switch (role.id) {
+    case 'cupid': {
+      label.textContent = '💘 คิวปิด — เลือกคู่รัก 2 คน (คืนแรก):'
+      const targets = aliveTargets(data, true)
+      const selA = makeSelect(targets, 'เลือกคนที่ 1...')
+      const selB = makeSelect(targets, 'เลือกคนที่ 2...')
+      btn.textContent = 'ยืนยันคู่รัก'
+      btn.addEventListener('click', async () => {
+        const a = selA.value
+        const b = selB.value
+        if (!a || !b) {
+          showError('ต้องเลือกคู่รักครบ 2 คน')
+          return
+        }
+        if (a === b) {
+          showError('คู่รักต้องเป็นคนต่างกัน')
+          return
+        }
+        btn.disabled = true
+        btn.textContent = 'ส่งแล้ว...'
+        try {
+          await playerNightAction(code, { action: 'cupid', targets: [a, b] })
+          nightActionDoneEl.classList.remove('hidden')
+          nightActionFormEl.innerHTML = ''
+        } catch (e) {
+          btn.disabled = false
+          btn.textContent = 'ยืนยันคู่รัก'
+          showError('ส่งไม่สำเร็จ: ' + e.message)
+        }
+      })
+      nightActionFormEl.appendChild(label)
+      nightActionFormEl.appendChild(selA)
+      nightActionFormEl.appendChild(selB)
+      nightActionFormEl.appendChild(btn)
+      return
+    }
+
+    case 'sorceress': {
+      label.textContent = '🔮 แม่มดหมาป่า — ตรวจว่าผู้เล่นคนไหนเป็น Seer:'
+      const targets = aliveTargets(data, false)
+      const sel = makeSelect(targets)
+      btn.textContent = 'ยืนยันตรวจ'
+      btn.addEventListener('click', async () => {
+        const target = sel.value
+        if (!target) return
+        btn.disabled = true
+        btn.textContent = 'ส่งแล้ว...'
+        try {
+          await playerNightAction(code, { action: 'sorceress', target })
+          nightActionDoneEl.classList.remove('hidden')
+          nightActionFormEl.innerHTML = ''
+        } catch (e) {
+          btn.disabled = false
+          btn.textContent = 'ยืนยันตรวจ'
+          showError('ส่งไม่สำเร็จ: ' + e.message)
+        }
+      })
+      nightActionFormEl.appendChild(label)
+      nightActionFormEl.appendChild(sel)
+      nightActionFormEl.appendChild(btn)
+      return
+    }
+
+    case 'witch': {
+      label.textContent = '🧪 แม่มด — เลือกยาชุบชีวิต และ/หรือ ยาพิษ (คืนละ 1 อย่าง):'
+      const targets = aliveTargets(data, false)
+      const selSave = makeSelect(targets, '— ไม่ใช้ยาชุบ —')
+      const selPoison = makeSelect(targets, '— ไม่ใช้ยาพิษ —')
+      btn.textContent = 'ยืนยัน'
+      btn.addEventListener('click', async () => {
+        const save = selSave.value
+        const poison = selPoison.value
+        if (poison && poison === save) {
+          showError('ยาพิษกับยาชุบต้องใช้กับคนต่างกัน')
+          return
+        }
+        const action = { action: 'witch' }
+        if (save) action.save = true, action.target = save
+        if (poison) action.poison = true, action.poisonTarget = poison
+        if (!save && !poison) {
+          showError('เลือกยาอย่างน้อย 1 อย่าง')
+          return
+        }
+        btn.disabled = true
+        btn.textContent = 'ส่งแล้ว...'
+        try {
+          await playerNightAction(code, action)
+          nightActionDoneEl.classList.remove('hidden')
+          nightActionFormEl.innerHTML = ''
+        } catch (e) {
+          btn.disabled = false
+          btn.textContent = 'ยืนยัน'
+          showError('ส่งไม่สำเร็จ: ' + e.message)
+        }
+      })
+      nightActionFormEl.appendChild(label)
+      nightActionFormEl.appendChild(document.createElement('div')).textContent = ''
+      const t1 = document.createElement('div')
+      t1.className = 'setting-name'
+      t1.style.cssText = 'margin-top:8px;'
+      t1.textContent = 'ยาชุบชีวิต (ช่วยคนตาย):'
+      nightActionFormEl.appendChild(t1)
+      nightActionFormEl.appendChild(selSave)
+      const t2 = document.createElement('div')
+      t2.className = 'setting-name'
+      t2.style.cssText = 'margin-top:8px;'
+      t2.textContent = 'ยาพิษ (ฆ่า 1 คน):'
+      nightActionFormEl.appendChild(t2)
+      nightActionFormEl.appendChild(selPoison)
+      nightActionFormEl.appendChild(btn)
+      return
+    }
+
+    default: {
+      const descMap = {
+        seer: ['🔮 ผู้หยั่งรู้ — ตรวจผู้เล่น 1 คน (รู้ว่าหมาป่าหรือไม่)', 'ยืนยันตรวจ'],
+        aura_seer: ['🌟 ผู้หยั่งรู้ออร่า — ตรวจบทบาทจริงของผู้เล่น 1 คน', 'ยืนยันตรวจ'],
+        doctor: ['💉 หมอ — เลือกปกป้อง 1 คน (ห้ามเป็นตัวเอง)', 'ยืนยันปกป้อง'],
+        bodyguard: ['🛡️ บอดี้การ์ด — เลือกปกป้อง 1 คน', 'ยืนยันปกป้อง'],
+      }
+      const d = descMap[role.id]
+      if (!d) {
+        nightActionStatusEl.textContent = '🌙 host กำลังเรียก: ' + role.nameTh + ' (ไม่มี action — ปิดตาได้)'
+        return
+      }
+      label.textContent = d[0]
+      btn.textContent = d[1]
+      const excludeSelf = role.id === 'doctor'
+      const targets = aliveTargets(data, excludeSelf)
+      const sel = makeSelect(targets)
+      btn.addEventListener('click', async () => {
+        const target = sel.value
+        if (!target) return
+        btn.disabled = true
+        btn.textContent = 'ส่งแล้ว...'
+        try {
+          await playerNightAction(code, { action: role.id, target })
+          nightActionDoneEl.classList.remove('hidden')
+          nightActionFormEl.innerHTML = ''
+        } catch (e) {
+          btn.disabled = false
+          btn.textContent = d[1]
+          showError('ส่งไม่สำเร็จ: ' + e.message)
+        }
+      })
+      nightActionFormEl.appendChild(label)
+      nightActionFormEl.appendChild(sel)
+      nightActionFormEl.appendChild(btn)
+      return
+    }
+  }
 }
 
 function useNightActionUI(data, meta) {
   if (!nightActionViewEl) return
   const me = getMe(data)
-  const role = me && me.role ? getRole(me.role) : null
+  if (!me || !me.role) {
+    nightActionViewEl.classList.add('hidden')
+    return
+  }
+  const role = getRole(me.role)
   const isNight = meta.phase === 'night'
   const call = meta.hostCall || ''
 
@@ -121,8 +266,6 @@ function useNightActionUI(data, meta) {
   }
 
   nightActionViewEl.classList.remove('hidden')
-
-  // player เห็น status เสมอ แต่โชว์ฟอร์มเฉพาะเมื่อ host เรียก role ตัวเอง
   nightActionDoneEl.classList.add('hidden')
   nightActionFormEl.innerHTML = ''
 
@@ -131,19 +274,28 @@ function useNightActionUI(data, meta) {
     return
   }
 
-  if (call === role.id) {
-    nightActionStatusEl.textContent = '🌙 host กำลังเรียก: ' + role.nameTh + ' — ลืมตาแล้วตอบ'
-    const actionDesc = getNightActionDesc(role.id)
-    if (roleHasNightAction(role.id)) {
-      buildNightForm(data, role)
-    } else {
-      nightActionStatusEl.textContent = '🌙 host กำลังเรียก: ' + role.nameTh + ' (ไม่มี action — ปิดตาได้)'
-    }
-  } else {
+  if (call !== role.id) {
     nightActionStatusEl.textContent =
       call ? '🌙 host กำลังเรียก: ' + (getRole(call) ? getRole(call).nameTh : call) + ' — ยังไม่ถึงตาเรา'
       : '🌙 กลางคืน... รอ host เรียก'
+    return
   }
+
+  nightActionStatusEl.textContent = '🌙 host กำลังเรียก: ' + role.nameTh + ' — ลืมตาแล้วตอบ'
+
+  // cupid กินเฉพาะคืนแรก
+  if (role.id === 'cupid' && (meta.nightIndex || 0) !== 1) {
+    nightActionStatusEl.textContent = '🌙 host กำลังเรียก: ' + role.nameTh + ' (หมดสิทธิ์คืนแรกแล้ว — ปิดตาได้)'
+    return
+  }
+
+  // cursed ยังไม่ถูกกัด → ไม่ต้องตอบอะไรตอนกลางคืน
+  if (role.id === 'cursed' && me.cursedStatus !== 'wolf') {
+    nightActionStatusEl.textContent = '🌙 host กำลังเรียก: ' + role.nameTh + ' (ยังเป็นชาวบ้าน — ปิดตาได้)'
+    return
+  }
+
+  buildNightForm(data, role, me)
 }
 
 if (!code) {
