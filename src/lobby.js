@@ -37,7 +37,8 @@ function renderPlayers(players, hostUid) {
 
     const nameSpan = document.createElement('span')
     nameSpan.className = 'player-name'
-    nameSpan.textContent = p.name || '???'
+    const nm = String(p.name || '').trim()
+    nameSpan.textContent = nm || 'ผู้เล่นที่ยังไม่ตั้งชื่อ'
 
     const tags = document.createElement('span')
     tags.className = 'player-tags'

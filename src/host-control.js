@@ -248,7 +248,13 @@ function renderNightSequencer(roomData) {
   if (!roomData || !nightViewEl) return
   const meta = roomData.meta || {}
   const isNight = meta.phase === 'night'
-  nightViewEl.classList.toggle('hidden', !isNight)
+  if (isNight) {
+    nightViewEl.classList.remove('hidden')
+    nightViewEl.style.display = ''
+  } else {
+    nightViewEl.classList.add('hidden')
+    nightViewEl.style.display = 'none'
+  }
   if (!isNight) return
   nightSeqIndexEl.textContent = String(meta.nightIndex || 0)
 
@@ -384,6 +390,9 @@ initAuth().then(() => {
       setupViewEl.classList.add('hidden')
       gameViewEl.classList.remove('hidden')
       renderNightSequencer(roomData)
+      const rp = getPlayers(roomData)
+      const allRole = rp.length >= 5 && rp.every(([, p]) => !!p.role)
+      btnStart.disabled = !allRole
       roleListEl.innerHTML = ''
       const entries = getPlayers(data).sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0))
       for (const [uid, p] of entries) {
