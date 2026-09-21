@@ -27,9 +27,10 @@ function metaNightRef(code) {
 }
 
 function wolfActionsRef(code) {
-  // wolf picks เก็บที่ rooms/$code/wolf (ตรง security rules ที่ publish อยู่แล้ว:
-  // .read/.write = werewolf + host) → ไม่ต้องแก้ rules/ไม่ต้อง publish ใหม่
-  return db.ref('rooms/' + code + '/wolf')
+  // wolf picks เก็บที่ night/$uid (self-write ตาม rules ที่ publish อยู่แล้ว:
+  // night/$uid .write = auth.uid === $uid → werewolf/wolf_cub/sorceress/cursed-wolf ทุกตัวเขียนได้)
+  // → ไม่ต้องแก้ rules/ไม่ต้อง publish ใหม่
+  return db.ref('rooms/' + code + '/night')
 }
 
 // ===================== HOST =====================
@@ -52,13 +53,12 @@ async function hostStartNight(code) {
   updates['meta/nightResult'] = null
   updates['meta/hunterReveal'] = null
 
-  // wolf picks เก็บที่ top-level wolf node (host + werewolf เขียนได้ตาม rules)
-  updates['wolf'] = {}
-  updates['meta/hostCall'] = ''
-  updates['meta/wolfConfirmed'] = null
-  updates['meta/nightResult'] = null
-  updates['meta/hunterReveal'] = null
+  // wolf picks → night/$uid (self-write ตาม rules ที่ publish อยู่แล้ว:
+  // night/$uid .write = auth.uid === $uid → werewolf/wolf_cub/sorceress/cursed-wolf เขียนได้หมด)
+  // → ไม่ต้อง init/เคลียร์ wolf node / ไม่ต้องแก้ rules / ไม่ต้อง publish ใหม่
 
+  const wolfTeammates = []
+  for (const [uid, p] of playerList) {
     const role = getRole(p.role)
     if (!role) continue
     if (p.role === 'werewolf' || p.role === 'wolf_cub' || p.role === 'sorceress') {
@@ -125,9 +125,18 @@ async function hostFinishNight(code) {
   const meta = data.meta || {}
   const players = data.players || {}
   const night = data.night || {}
-  const wolfPicks = (data.wolf || {}) // wolf picks เก็บที่ top-level wolf node (อ่านจาก data.wolf ไม่ใช่ night.wolf)
-  const confirmed = meta.wolfConfirmed
   const nightIndex = meta.nightIndex || 0
+  const confirmed = meta.wolfConfirmed
+  // host เคลียร์ night/$uid ไม่ได้ (rules: self-write เท่านั้น ถึงเคลียร์ได้เฉพาะของตัวเอง)
+  // → wolf picks อ่านจาก night/$uid ที่ action==='wolf' + nightIndex ตรงคืนนี้ (กัน pick ค้างจากคืนก่อน)
+  const wolfPicks = {}
+  for (const uid in night) {
+    if (uid === 'wolf') continue
+    const a = night[uid] || {}
+    if (a.action === 'wolf' && a.nightIndex === nightIndex && a.target) {
+      wolfPicks[uid] = { target: a.target, nightIndex: a.nightIndex }
+    }
+  }
 
   const dead = {}
   const saved = {}
@@ -236,7 +245,14 @@ function playerIsWolfCubKilled(victim, players) {
 // หมาป่าเลือกเหยื่อ (เขียน night/wolf/$uid/target)
 async function playerWolfPick(code, targetUid) {
   const uid = getUserId()
-  await wolfActionsRef(code).child(uid).update({ target: targetUid })
+  const metaSnap = await metaNightRef(code).child('nightIndex').once('value')
+  const nightIndex = metaSnap.val() || 0
+  await wolfActionsRef(code).child(uid).set({
+    action: 'wolf',
+    target: targetUid,
+    nightIndex,
+    at: firebase.database.ServerValue.TIMESTAMP,
+  })
 }
 
 // ผู้เล่นเขียน action ของตัวเอง (night/$uid/action)
