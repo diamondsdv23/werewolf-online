@@ -260,7 +260,7 @@ function renderNightSequencer(roomData) {
 
   // Role Caller — hostCall ส่งผ่าน meta (hostCallNextRole เขียน meta/hostCall)
   const call = meta.hostCall || ''
-  const callViewOn = call && call !== 'DONE'
+  const callViewOn = meta.phase === 'night' || (call && call !== 'DONE')
   callRoleViewEl.classList.toggle('hidden', !callViewOn)
   if (callViewOn) {
     const r = getRoleInfo(call)
@@ -334,6 +334,7 @@ function renderNightSequencer(roomData) {
 
 btnStartNightEl.addEventListener('click', () => {
   hostStartNight(code)
+    .then(() => hostCallNextRole(code))
     .then(() => { nightSeqStatusEl.textContent = 'กลางคืนเริ่มแล้ว — host เริ่มเรียก Role' })
     .catch((err) => showError('เริ่มกลางคืนไม่สำเร็จ: ' + err.message))
 })
