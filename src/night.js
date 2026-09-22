@@ -53,6 +53,7 @@ async function hostStartNight(code) {
   updates['meta/nightIndex'] = nightIndex
   updates['meta/hostCall'] = ''
   updates['meta/wolfConfirmed'] = null
+  updates['meta/wolfSkipped'] = false
   updates['meta/nightResult'] = null
   updates['meta/hunterReveal'] = null
 
@@ -119,7 +120,18 @@ async function hostConfirmWolf(code, targetUid) {
   const r = roomRef(code)
   await r.update({
     'meta/wolfConfirmed': targetUid,
+    'meta/wolfSkipped': false,
     'meta/hostCall': '', // จบขั้น wolf
+  })
+}
+
+// host ข้ามการฆ่าของหมาป่า (AFK ไม่เลือกเหยื่อ) → คืนนี้ไม่มีคนโดนกัด
+async function hostSkipWolf(code) {
+  const r = roomRef(code)
+  await r.update({
+    'meta/wolfConfirmed': null,
+    'meta/wolfSkipped': true,
+    'meta/hostCall': '',
   })
 }
 
@@ -160,6 +172,7 @@ async function hostFinishNight(code) {
 
   // ===== 2. protections (doctor/bodyguard/witch save) =====
   let protectedUid = null
+  let witchSaveUsed = false
   for (const uid in night) {
     if (uid === 'wolf') continue
     const action = night[uid] || {}
@@ -171,7 +184,9 @@ async function hostFinishNight(code) {
         protectedUid = action.target
       }
       if (role.id === 'witch' && action.save === true) {
-        protectedUid = action.target
+        // ด้วยา 1 ครั้งต่อเกม — ถ้าใช้ไปแล้ว → host ฝั่งจะไม่นับ (ป้องกันหน้าแก้)
+        if (meta.witchSaveUsed !== true) protectedUid = action.target
+        witchSaveUsed = true
       }
     }
   }
@@ -183,7 +198,7 @@ async function hostFinishNight(code) {
     const action = night[uid] || {}
     if (action.nightIndex !== nightIndex) continue
     const role = getRole((players[uid] || {}).role)
-    if (role && role.id === 'witch' && action.poison && action.poisonTarget) {
+    if (role && role.id === 'witch' && action.poison && action.poisonTarget && meta.witchPoisonUsed !== true) {
       poisonTarget = action.poisonTarget
     }
   }
@@ -229,6 +244,11 @@ async function hostFinishNight(code) {
   // - ตายจากเหตุอื่น (poison/โหวต) → ตายปกติ ไม่แปลง
   const updates = {}
   const deadUids = Object.keys(dead)
+
+  // Witch ใช้ยาแล้ว → ล็อกครั้งเดียวต่อเกม (guard ฝั่ง host ไม่รับซ้ำ)
+  if (witchSaveUsed) updates['meta/witchSaveUsed'] = true
+  if (poisonTarget) updates['meta/witchPoisonUsed'] = true
+
   const wasCursedVictim = wolfVictim && players[wolfVictim] && players[wolfVictim].role === 'cursed' && dead[wolfVictim] === 'wolf'
   if (wasCursedVictim && !saved[wolfVictim]) {
     updates['players/' + wolfVictim + '/cursedStatus'] = 'wolf'

@@ -168,51 +168,62 @@ function buildNightForm(data, role, me) {
     }
 
     case 'witch': {
-      label.textContent = '🧪 แม่มด — เลือกยาชุบชีวิต และ/หรือ ยาพิษ (คืนละ 1 อย่าง):'
+      const meta = data.meta || {}
+      const usedSave = meta.witchSaveUsed === true
+      const usedPoison = meta.witchPoisonUsed === true
+      label.textContent = '🧪 แม่มด — ยาชุบ' + (usedSave ? 'ใช้แล้ว' : 'พร้อม') + ' · ยาพิษ' + (usedPoison ? 'ใช้แล้ว' : 'พร้อม') + ' (คืนละ 1 อย่างเท่านั้น):'
+      nightActionFormEl.appendChild(label)
+
+      if (usedSave && usedPoison) {
+        nightActionStatusEl.textContent = '🧪 ใช้ยาหมดแล้วทั้ง 2 ชนิด — ปิดตาได้'
+        return
+      }
+
       const targets = aliveTargets(data, false)
-      const selSave = makeSelect(targets, '— ไม่ใช้ยาชุบ —')
-      const selPoison = makeSelect(targets, '— ไม่ใช้ยาพิษ —')
-      btn.textContent = 'ยืนยัน'
+      const typeSel = document.createElement('select')
+      typeSel.className = 'input'
+      typeSel.style.cssText = 'margin-top:6px;width:100%;'
+      const optSave = document.createElement('option')
+      optSave.value = 'save'
+      optSave.textContent = usedSave ? 'ยาชุบ (ใช้แล้ว)' : 'ยาชุบชีวิต — รอดจากหมาป่าคืนนี้ (ใช้ได้ครั้งเดียว)'
+      const optPoison = document.createElement('option')
+      optPoison.value = 'poison'
+      optPoison.textContent = usedPoison ? 'ยาพิษ (ใช้แล้ว)' : 'ยาพิษ — ฆ่าเป้าหมาย (ใช้ได้ครั้งเดียว)'
+      typeSel.appendChild(optSave)
+      typeSel.appendChild(optPoison)
+      if (usedSave) typeSel.value = 'poison'
+      if (usedPoison) typeSel.value = 'save'
+      const targetSel = makeSelect(targets, 'เลือกเป้าหมาย...')
+      btn.textContent = 'ยืนยันใช้ยา'
       btn.addEventListener('click', async () => {
-        const save = selSave.value
-        const poison = selPoison.value
-        if (poison && poison === save) {
-          showError('ยาพิษกับยาชุบต้องใช้กับคนต่างกัน')
-          return
-        }
-        const action = { action: 'witch' }
-        if (save) action.save = true, action.target = save
-        if (poison) action.poison = true, action.poisonTarget = poison
-        if (!save && !poison) {
-          showError('เลือกยาอย่างน้อย 1 อย่าง')
+        const type = typeSel.value
+        const target = targetSel.value
+        if (!target) {
+          showError('ต้องเลือกเป้าหมาย')
           return
         }
         btn.disabled = true
         btn.textContent = 'ส่งแล้ว...'
         try {
+          const action = { action: 'witch' }
+          if (type === 'save') {
+            action.save = true
+            action.target = target
+          } else {
+            action.poison = true
+            action.poisonTarget = target
+          }
           await playerNightAction(code, action)
           nightActionDoneEl.classList.remove('hidden')
           nightActionFormEl.innerHTML = ''
         } catch (e) {
           btn.disabled = false
-          btn.textContent = 'ยืนยัน'
+          btn.textContent = 'ยืนยันใช้ยา'
           showError('ส่งไม่สำเร็จ: ' + e.message)
         }
       })
-      nightActionFormEl.appendChild(label)
-      nightActionFormEl.appendChild(document.createElement('div')).textContent = ''
-      const t1 = document.createElement('div')
-      t1.className = 'setting-name'
-      t1.style.cssText = 'margin-top:8px;'
-      t1.textContent = 'ยาชุบชีวิต (ช่วยคนตาย):'
-      nightActionFormEl.appendChild(t1)
-      nightActionFormEl.appendChild(selSave)
-      const t2 = document.createElement('div')
-      t2.className = 'setting-name'
-      t2.style.cssText = 'margin-top:8px;'
-      t2.textContent = 'ยาพิษ (ฆ่า 1 คน):'
-      nightActionFormEl.appendChild(t2)
-      nightActionFormEl.appendChild(selPoison)
+      nightActionFormEl.appendChild(typeSel)
+      nightActionFormEl.appendChild(targetSel)
       nightActionFormEl.appendChild(btn)
       return
     }
@@ -232,7 +243,17 @@ function buildNightForm(data, role, me) {
       label.textContent = d[0]
       btn.textContent = d[1]
       const excludeSelf = role.id === 'doctor'
-      const targets = aliveTargets(data, excludeSelf)
+      let targets = aliveTargets(data, excludeSelf)
+      if (role.id === 'bodyguard') {
+        // ห้ามป้องกันคนเดิมซ้ำจากคืนก่อน (อ่าน entry คืนก่อนของตัวเองจาก night/$uid ที่ merge กัน)
+        const meta = data.meta || {}
+        const myNight = (data.night || {})[getUserId()] || {}
+        const lastBg = (myNight.action === 'bodyguard' && myNight.nightIndex === (meta.nightIndex || 0) - 1) ? myNight.target : null
+        if (lastBg) {
+          targets = targets.filter(([uid]) => uid !== lastBg)
+          label.textContent = '🛡️ บอดี้การ์ด — เลือกปกป้อง 1 คน (ห้ามซ้ำ: ' + playerName((data.players || {})[lastBg], lastBg) + ' จากคืนก่อน)'
+        }
+      }
       const sel = makeSelect(targets)
       btn.addEventListener('click', async () => {
         const target = sel.value

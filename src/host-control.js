@@ -223,6 +223,7 @@ const wolfPickTotalEl = document.getElementById('wolf-pick-total-el')
 const wolfPickListEl = document.getElementById('wolf-pick-list-el')
 const wolfConfirmTargetEl = document.getElementById('wolf-confirm-target-el')
 const btnWolfConfirmEl = document.getElementById('btn-wolf-confirm')
+const btnWolfSkipEl = document.getElementById('btn-wolf-skip')
 const afkViewEl = document.getElementById('afk-view')
 const afkListEl = document.getElementById('afk-list-el')
 const cursedViewEl = document.getElementById('cursed-view')
@@ -271,9 +272,10 @@ function renderNightSequencer(roomData) {
     const r = getRole(call)
     callRoleNameEl.textContent = (r ? r.nameTh + ' (' + r.nameEn + ')' : call) + ' ← เรียกผ่านหน้าหมวกของแต่ละคน'
   }
-  nightSeqStatusEl.textContent =
-    call === 'DONE' ? 'เรียกครบแล้ว — host ยืนยัน Wolf แล้วกด จบกลางคืน'
+nightSeqStatusEl.textContent =
+    call === 'DONE' ? (meta.wolfConfirmed || meta.wolfSkipped ? 'เรียกครบแล้ว — host กด จบกลางคืน · เปิดเช้า' : 'เรียกครบแล้ว — host ยืนยัน Wolf หรือกด ข้าม (หมาป่า AFK)')
     : callViewOn ? 'กำลังเรียก Role — รอ action จากเจ้าของ role'
+    : meta.wolfSkipped ? '🕊️ host ข้ามการฆ่าแล้ว (หมาป่า AFK) — กด จบกลางคืน · เปิดเช้า'
     : meta.wolfConfirmed ? 'Wolf เลือกครบแล้ว — host กด จบกลางคืน · เปิดเช้า'
     : 'กลางคืนเริ่มแล้ว — host เริ่มเรียก Role'
   if (meta.wolvesSick === true && meta.phase === 'night') {
@@ -318,7 +320,6 @@ function renderNightSequencer(roomData) {
   const wolfPlayers = allPlayers.filter(([uid, p]) => p.role === 'werewolf' || p.role === 'wolf_cub' || p.role === 'sorceress' || (p.role === 'cursed' && p.cursedStatus === 'wolf'))
   wolfPickCountEl.textContent = String(wolfTargets.size)
   wolfPickTotalEl.textContent = String(wolfPlayers.length)
-  const pickedNames = [...wolfTargets].map((u) => nameOf(roomData, u))
   wolfPickListEl.innerHTML = ''
   for (const [uid, p] of wolfPlayers) {
     const li = document.createElement('li')
@@ -337,6 +338,9 @@ function renderNightSequencer(roomData) {
   }
   wolfConfirmTargetEl.classList.toggle('hidden', wolfTargets.size === 0)
   btnWolfConfirmEl.disabled = wolfTargets.size === 0 || !!meta.wolfConfirmed
+  btnWolfSkipEl.disabled = !!meta.wolfConfirmed
+  // host กดจบกลางคืนได้เมื่อ: เรียก role ครบแล้ว + (confirm เป้าแล้ว หรือ host ข้ามการฆ่าไปแล้ว)
+  btnFinishNightEl.disabled = call !== 'DONE' || (!meta.wolfConfirmed && meta.wolfSkipped !== true)
 
   // AFK — role ที่มี action กลางคืนยังไม่เขียนคืนนี้
   const acted = new Set([...entries.map(([uid]) => uid)])
@@ -429,6 +433,11 @@ btnWolfConfirmEl.addEventListener('click', () => {
   const target = wolfConfirmTargetEl.value
   if (!target) return
   hostConfirmWolf(code, target).then(() => {}).catch((err) => showError('ยืนยัน Wolf ไม่สำเร็จ: ' + err.message))
+})
+
+btnWolfSkipEl.addEventListener('click', () => {
+  if (!confirm('หมาป่ายังไม่เลือกเหยื่อ — ข้ามการฆ่าคืนนี้?')) return
+  hostSkipWolf(code).then(() => {}).catch((err) => showError('ข้าม Wolf ไม่สำเร็จ: ' + err.message))
 })
 
 btnFinishNightEl.addEventListener('click', () => {
